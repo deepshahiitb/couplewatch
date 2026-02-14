@@ -807,97 +807,104 @@ export default function CoupleWatch() {
           )}
 
           {/* Main Content */}
-          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+          <div className="flex-1 flex flex-col items-center justify-center p-3 overflow-hidden">
             {currentContent ? (
-              <div 
-                ref={cardRef}
-                className="w-full max-w-sm mx-auto"
-                style={{
-                  transform: `translateX(${dragOffset.x}px) translateY(${dragOffset.y}px) rotate(${getCardRotation()}deg)`,
-                  opacity: getCardOpacity(),
-                  transition: isDragging ? 'none' : 'transform 0.3s, opacity 0.3s',
-                  cursor: isDragging ? 'grabbing' : 'grab',
-                  touchAction: 'none'
-                }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-              >
-                <div className="bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-                  <div className="relative" style={{ aspectRatio: '2/3' }}>
-                    <img
-                      src={`https://image.tmdb.org/t/p/w500${currentContent.poster_path}`}
-                      alt={currentContent.title || currentContent.name}
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                    <div className="absolute top-3 right-3 bg-black/70 backdrop-blur px-2 py-1 rounded-full flex items-center gap-1">
-                      {currentContent.type === 'movie' ? (
-                        <Film className="w-3 h-3 text-yellow-400" />
-                      ) : (
-                        <Tv className="w-3 h-3 text-blue-400" />
-                      )}
-                      <span className="text-white text-xs font-medium">
-                        {currentContent.type === 'movie' ? 'Movie' : 'TV'}
-                      </span>
-                    </div>
-                    {currentContent.vote_average > 0 && (
-                      <div className="absolute top-3 left-3 bg-yellow-500 px-2 py-1 rounded-full flex items-center gap-1">
-                        <Star className="w-3 h-3 text-white" fill="white" />
-                        <span className="text-white font-bold text-xs">{currentContent.vote_average.toFixed(1)}</span>
+              <div className="w-full max-w-sm flex flex-col h-full justify-center">
+                <div 
+                  ref={cardRef}
+                  className="flex-shrink-0"
+                  style={{
+                    transform: `translateX(${dragOffset.x}px) translateY(${dragOffset.y}px) rotate(${getCardRotation()}deg)`,
+                    opacity: getCardOpacity(),
+                    transition: isDragging ? 'none' : 'transform 0.3s, opacity 0.3s',
+                    cursor: isDragging ? 'grabbing' : 'grab',
+                    touchAction: 'none'
+                  }}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                >
+                  <div className="bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+                    {/* Poster - 55% of available height */}
+                    <div className="relative" style={{ height: 'calc((100vh - 200px) * 0.55)' }}>
+                      <img
+                        src={`https://image.tmdb.org/t/p/w500${currentContent.poster_path}`}
+                        alt={currentContent.title || currentContent.name}
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                      <div className="absolute top-2 right-2 bg-black/70 backdrop-blur px-2 py-1 rounded-full flex items-center gap-1">
+                        {currentContent.type === 'movie' ? (
+                          <Film className="w-3 h-3 text-yellow-400" />
+                        ) : (
+                          <Tv className="w-3 h-3 text-blue-400" />
+                        )}
+                        <span className="text-white text-xs font-medium">
+                          {currentContent.type === 'movie' ? 'Movie' : 'TV'}
+                        </span>
                       </div>
-                    )}
-                    
-                    {/* Swipe Indicators */}
-                    {isDragging && (
-                      <>
-                        {dragOffset.x > 50 && (
-                          <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
-                            <div className="bg-green-500 text-white px-6 py-3 rounded-full font-bold text-2xl transform rotate-12">
-                              LIKE
+                      {currentContent.vote_average > 0 && (
+                        <div className="absolute top-2 left-2 bg-yellow-500 px-2 py-1 rounded-full flex items-center gap-1">
+                          <Star className="w-3 h-3 text-white" fill="white" />
+                          <span className="text-white font-bold text-xs">{currentContent.vote_average.toFixed(1)}</span>
+                        </div>
+                      )}
+                      
+                      {/* Swipe Indicators */}
+                      {isDragging && (
+                        <>
+                          {dragOffset.x > 50 && (
+                            <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
+                              <div className="bg-green-500 text-white px-4 py-2 rounded-full font-bold text-xl transform rotate-12">
+                                LIKE
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {dragOffset.x < -50 && (
-                          <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
-                            <div className="bg-red-500 text-white px-6 py-3 rounded-full font-bold text-2xl transform -rotate-12">
-                              NOPE
+                          )}
+                          {dragOffset.x < -50 && (
+                            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
+                              <div className="bg-red-500 text-white px-4 py-2 rounded-full font-bold text-xl transform -rotate-12">
+                                NOPE
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                          )}
+                        </>
+                      )}
+                    </div>
 
-                  <div className="p-4">
-                    <h2 className="text-lg font-bold text-white mb-1 line-clamp-2">
-                      {currentContent.title || currentContent.name}
-                    </h2>
-                    <p className="text-gray-400 text-xs mb-2">
-                      {currentContent.release_date || currentContent.first_air_date
-                        ? new Date(currentContent.release_date || currentContent.first_air_date).getFullYear()
-                        : ''}
-                    </p>
-                    <p className="text-gray-300 text-xs line-clamp-2">{currentContent.overview}</p>
+                    {/* Info section - compact but readable */}
+                    <div className="p-3">
+                      <h2 className="text-base font-bold text-white mb-1 line-clamp-2">
+                        {currentContent.title || currentContent.name}
+                      </h2>
+                      <p className="text-gray-400 text-xs mb-2">
+                        {currentContent.release_date || currentContent.first_air_date
+                          ? new Date(currentContent.release_date || currentContent.first_air_date).getFullYear()
+                          : ''}
+                      </p>
+                      <p className="text-gray-300 text-xs line-clamp-3 leading-relaxed">
+                        {currentContent.overview}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex justify-center gap-6 mt-6">
+                {/* Buttons - always visible */}
+                <div className="flex justify-center gap-6 mt-3 flex-shrink-0">
                   <button
                     onClick={() => handleSwipe(false)}
-                    className="bg-red-500 hover:bg-red-600 p-5 rounded-full shadow-xl transform hover:scale-110 transition active:scale-95"
+                    className="bg-red-500 hover:bg-red-600 p-4 rounded-full shadow-xl transform hover:scale-110 transition active:scale-95"
                   >
-                    <X className="w-8 h-8 text-white" strokeWidth={3} />
+                    <X className="w-7 h-7 text-white" strokeWidth={3} />
                   </button>
                   <button
                     onClick={() => handleSwipe(true)}
-                    className="bg-green-500 hover:bg-green-600 p-5 rounded-full shadow-xl transform hover:scale-110 transition active:scale-95"
+                    className="bg-green-500 hover:bg-green-600 p-4 rounded-full shadow-xl transform hover:scale-110 transition active:scale-95"
                   >
-                    <Heart className="w-8 h-8 text-white" fill="white" strokeWidth={3} />
+                    <Heart className="w-7 h-7 text-white" fill="white" strokeWidth={3} />
                   </button>
                 </div>
               </div>
