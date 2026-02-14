@@ -72,6 +72,9 @@ export default function CoupleWatch() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [exitDirection, setExitDirection] = useState(0);
+  const [cast, setCast] = useState([]);
   const cardRef = useRef(null);
 
   // Filter state
@@ -109,6 +112,27 @@ export default function CoupleWatch() {
       loadContent();
     }
   }, [user, view, filters]);
+
+  useEffect(() => {
+    if (currentContent) {
+      loadCast();
+    }
+  }, [currentContent]);
+
+  const loadCast = async () => {
+    if (!currentContent) return;
+    try {
+      const endpoint = currentContent.type === 'movie' ? 'movie' : 'tv';
+      const res = await fetch(
+        `https://api.themoviedb.org/3/${endpoint}/${currentContent.id}/credits?api_key=${TMDB_API_KEY}`
+      );
+      const data = await res.json();
+      setCast((data.cast || []).slice(0, 4)); // Top 4 cast members
+    } catch (err) {
+      console.error('Error loading cast:', err);
+      setCast([]);
+    }
+  };
 
   const initializeUser = async (userId) => {
     try {
@@ -248,10 +272,17 @@ export default function CoupleWatch() {
           type: firstUrl.includes('discover/movie') ? 'movie' : 'tv'
         }));
 
-        // Filter and show immediately
-        const unseenContent = typed.filter(
+        // Filter out already swiped AND apply min rating client-side
+        let unseenContent = typed.filter(
           item => !swipedIds.has(`${item.type}-${item.id}`)
         );
+
+        // CRITICAL: Client-side rating filter as backup
+        if (filters.minRating > 0) {
+          unseenContent = unseenContent.filter(
+            item => (item.vote_average || 0) >= filters.minRating
+          );
+        }
 
         // Sort by popularity
         unseenContent.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
@@ -292,9 +323,16 @@ export default function CoupleWatch() {
       }
 
       // Filter out already swiped
-      const unseenContent = allResults.filter(
+      let unseenContent = allResults.filter(
         item => !swipedIds.has(`${item.type}-${item.id}`)
       );
+
+      // CRITICAL: Client-side rating filter
+      if (filters.minRating > 0) {
+        unseenContent = unseenContent.filter(
+          item => (item.vote_average || 0) >= filters.minRating
+        );
+      }
 
       // Sort by popularity
       unseenContent.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
@@ -341,7 +379,11 @@ export default function CoupleWatch() {
   };
 
   const handleSwipe = async (liked) => {
-    if (!currentContent || !user) return;
+    if (!currentContent || !user || isExiting) return;
+
+    // Trigger exit animation
+    setIsExiting(true);
+    setExitDirection(liked ? 1 : -1);
 
     try {
       await supabase.from('swipes').insert({
@@ -356,25 +398,34 @@ export default function CoupleWatch() {
         setMyLikes(prev => [...prev, currentContent]);
       }
 
-      const newQueue = contentQueue.slice(1);
-      setContentQueue(newQueue);
-      setCurrentContent(newQueue[0] || null);
+      // Wait for animation to complete before switching cards
+      setTimeout(() => {
+        const newQueue = contentQueue.slice(1);
+        setContentQueue(newQueue);
+        setCurrentContent(newQueue[0] || null);
+        setIsExiting(false);
+        setExitDirection(0);
+        setDragOffset({ x: 0, y: 0 });
 
-      // Preload more content when queue gets low (5 cards left)
-      if (newQueue.length < 5) {
-        const { data: swipedData } = await supabase
-          .from('swipes')
-          .select('content_id, content_type')
-          .eq('user_id', user.id);
+        // Preload more content when queue gets low (5 cards left)
+        if (newQueue.length < 5) {
+          supabase
+            .from('swipes')
+            .select('content_id, content_type')
+            .eq('user_id', user.id)
+            .then(({ data: swipedData }) => {
+              const swipedIds = new Set(
+                (swipedData || []).map(s => `${s.content_type}-${s.content_id}`)
+              );
+              loadMoreContent(swipedIds);
+            });
+        }
+      }, 300); // Match this to CSS transition duration
 
-        const swipedIds = new Set(
-          (swipedData || []).map(s => `${s.content_type}-${s.content_id}`)
-        );
-
-        loadMoreContent(swipedIds);
-      }
     } catch (err) {
       console.error('Error saving swipe:', err);
+      setIsExiting(false);
+      setExitDirection(0);
     }
   };
 
@@ -394,38 +445,43 @@ export default function CoupleWatch() {
   };
 
   const handleTouchEnd = () => {
-    if (!isDragging) return;
+    if (!isDragging || isExiting) return;
     
     const swipeThreshold = 100;
     if (Math.abs(dragOffset.x) > swipeThreshold) {
       handleSwipe(dragOffset.x > 0);
+    } else {
+      // Only reset if not swiping
+      setDragOffset({ x: 0, y: 0 });
     }
     
-    setDragOffset({ x: 0, y: 0 });
     setIsDragging(false);
   };
 
   const handleMouseDown = (e) => {
+    if (isExiting) return;
     setDragStart({ x: e.clientX, y: e.clientY });
     setIsDragging(true);
   };
 
   const handleMouseMove = (e) => {
-    if (!isDragging) return;
+    if (!isDragging || isExiting) return;
     const offsetX = e.clientX - dragStart.x;
     const offsetY = e.clientY - dragStart.y;
     setDragOffset({ x: offsetX, y: offsetY });
   };
 
   const handleMouseUp = () => {
-    if (!isDragging) return;
+    if (!isDragging || isExiting) return;
     
     const swipeThreshold = 100;
     if (Math.abs(dragOffset.x) > swipeThreshold) {
       handleSwipe(dragOffset.x > 0);
+    } else {
+      // Only reset if not swiping
+      setDragOffset({ x: 0, y: 0 });
     }
     
-    setDragOffset({ x: 0, y: 0 });
     setIsDragging(false);
   };
 
@@ -903,9 +959,11 @@ export default function CoupleWatch() {
                   ref={cardRef}
                   className="flex-shrink-0"
                   style={{
-                    transform: `translateX(${dragOffset.x}px) translateY(${dragOffset.y}px) rotate(${getCardRotation()}deg)`,
-                    opacity: getCardOpacity(),
-                    transition: isDragging ? 'none' : 'transform 0.3s, opacity 0.3s',
+                    transform: isExiting 
+                      ? `translateX(${exitDirection * 1000}px) translateY(${dragOffset.y}px) rotate(${exitDirection * 30}deg)`
+                      : `translateX(${dragOffset.x}px) translateY(${dragOffset.y}px) rotate(${getCardRotation()}deg)`,
+                    opacity: isExiting ? 0 : getCardOpacity(),
+                    transition: isExiting ? 'transform 0.3s ease-in, opacity 0.3s ease-in' : (isDragging ? 'none' : 'transform 0.3s, opacity 0.3s'),
                     cursor: isDragging ? 'grabbing' : 'grab',
                     touchAction: 'none'
                   }}
@@ -996,6 +1054,32 @@ export default function CoupleWatch() {
                     <Heart className="w-7 h-7 text-white" fill="white" strokeWidth={3} />
                   </button>
                 </div>
+
+                {/* Cast - uses empty space below buttons */}
+                {cast.length > 0 && (
+                  <div className="mt-3 px-4 flex-shrink-0">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                      {cast.map((actor, idx) => (
+                        <div key={idx} className="flex-shrink-0 text-center">
+                          {actor.profile_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
+                              alt={actor.name}
+                              className="w-12 h-12 rounded-full object-cover mb-1 ring-2 ring-gray-700"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center mb-1 ring-2 ring-gray-600">
+                              <Users className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <p className="text-white text-xs font-medium w-16 truncate">
+                            {actor.name}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center text-white py-20">
