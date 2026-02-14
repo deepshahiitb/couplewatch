@@ -232,9 +232,47 @@ export default function CoupleWatch() {
         (swipedData || []).map(s => `${s.content_type}-${s.content_id}`)
       );
 
-      // Fetch multiple pages to get enough unswipped content
+      // Fetch just ONE page first for immediate display
+      const firstUrl = buildTMDBUrl();
+      const firstRes = await fetch(firstUrl);
+      const firstData = await firstRes.json();
+      
+      if (firstData.results && firstData.results.length > 0) {
+        const typed = firstData.results.map(item => ({
+          ...item,
+          type: firstUrl.includes('discover/movie') ? 'movie' : 'tv'
+        }));
+
+        // Filter and show immediately
+        const unseenContent = typed.filter(
+          item => !swipedIds.has(`${item.type}-${item.id}`)
+        );
+
+        // Sort by popularity
+        unseenContent.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+
+        // Show first card IMMEDIATELY
+        if (unseenContent.length > 0) {
+          setContentQueue(unseenContent);
+          setCurrentContent(unseenContent[0]);
+        }
+      }
+
+      // Load more in background (non-blocking)
+      setTimeout(() => {
+        loadMoreContent(swipedIds);
+      }, 100);
+
+    } catch (err) {
+      console.error('Error loading content:', err);
+    }
+  };
+
+  const loadMoreContent = async (swipedIds) => {
+    try {
+      // Fetch 2 more pages in background
       let allResults = [];
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         const url = buildTMDBUrl();
         const res = await fetch(url);
         const data = await res.json();
@@ -248,18 +286,25 @@ export default function CoupleWatch() {
         }
       }
 
-      // Filter out already swiped content
+      // Filter out already swiped
       const unseenContent = allResults.filter(
         item => !swipedIds.has(`${item.type}-${item.id}`)
       );
 
-      // Sort by popularity to show best first
+      // Sort by popularity
       unseenContent.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
-      setContentQueue(unseenContent);
-      setCurrentContent(unseenContent[0] || null);
+      // Append to existing queue (don't replace!)
+      setContentQueue(prev => {
+        const existing = new Set(prev.map(p => `${p.type}-${p.id}`));
+        const newItems = unseenContent.filter(
+          item => !existing.has(`${item.type}-${item.id}`)
+        );
+        return [...prev, ...newItems];
+      });
+
     } catch (err) {
-      console.error('Error loading content:', err);
+      console.error('Error loading more content:', err);
     }
   };
 
@@ -310,8 +355,18 @@ export default function CoupleWatch() {
       setContentQueue(newQueue);
       setCurrentContent(newQueue[0] || null);
 
-      if (newQueue.length < 10) {
-        loadContent();
+      // Preload more content when queue gets low (5 cards left)
+      if (newQueue.length < 5) {
+        const { data: swipedData } = await supabase
+          .from('swipes')
+          .select('content_id, content_type')
+          .eq('user_id', user.id);
+
+        const swipedIds = new Set(
+          (swipedData || []).map(s => `${s.content_type}-${s.content_id}`)
+        );
+
+        loadMoreContent(swipedIds);
       }
     } catch (err) {
       console.error('Error saving swipe:', err);
