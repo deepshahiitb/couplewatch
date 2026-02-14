@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, X, Film, Tv, Users, LogOut, Star, Flame, Check } from 'lucide-react';
+import { Heart, X, Film, Tv, Users, LogOut, Star, Flame, Check, Search } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const TMDB_API_KEY = '76dbff05004b7238127fe74ab6be5e2f';
@@ -10,35 +10,33 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function CoupleWatch() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('auth'); // auth, setup, swipe, matches
-  const [authMode, setAuthMode] = useState('signin'); // signin, signup
+  const [view, setView] = useState('auth'); // auth, swipe, compare, matches
+  const [authMode, setAuthMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [partnerCode, setPartnerCode] = useState('');
   const [myCode, setMyCode] = useState('');
-  const [coupled, setCoupled] = useState(false);
-  const [partnerId, setPartnerId] = useState(null);
+  const [compareCode, setCompareCode] = useState('');
   const [currentContent, setCurrentContent] = useState(null);
   const [contentQueue, setContentQueue] = useState([]);
+  const [myLikes, setMyLikes] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showCodePopup, setShowCodePopup] = useState(false);
 
   useEffect(() => {
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        checkCoupleStatus(session.user.id);
+        initializeUser(session.user.id);
       }
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
-        checkCoupleStatus(session.user.id);
+        initializeUser(session.user.id);
       } else {
         setUser(null);
         setView('auth');
@@ -49,12 +47,12 @@ export default function CoupleWatch() {
   }, []);
 
   useEffect(() => {
-    if (coupled && contentQueue.length === 0) {
+    if (user && view === 'swipe' && contentQueue.length === 0) {
       loadContent();
     }
-  }, [coupled, contentQueue]);
+  }, [user, view, contentQueue]);
 
-  const checkCoupleStatus = async (userId) => {
+  const initializeUser = async (userId) => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -63,35 +61,50 @@ export default function CoupleWatch() {
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // User record doesn't exist, create it
+        // Create user record
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert({
-            id: userId,
-            email: user?.email,
-            display_name: displayName || 'User',
-            couple_code: code
-          });
-        
-        if (!insertError) {
-          setMyCode(code);
-          setView('setup');
-        }
+        await supabase.from('users').insert({
+          id: userId,
+          email: user?.email,
+          display_name: displayName || 'User',
+          couple_code: code
+        });
+        setMyCode(code);
       } else if (data) {
         setMyCode(data.couple_code);
-        
-        if (data.partner_id) {
-          setPartnerId(data.partner_id);
-          setCoupled(true);
-          setView('swipe');
-          loadMatches(userId, data.partner_id);
-        } else {
-          setView('setup');
-        }
+      }
+      
+      // Load user's likes
+      await loadMyLikes(userId);
+      setView('swipe');
+    } catch (err) {
+      console.error('Error initializing user:', err);
+    }
+  };
+
+  const loadMyLikes = async (userId) => {
+    try {
+      const { data } = await supabase
+        .from('swipes')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('liked', true);
+
+      if (data) {
+        const likedContent = await Promise.all(
+          data.map(async (swipe) => {
+            const endpoint = swipe.content_type === 'movie' ? 'movie' : 'tv';
+            const res = await fetch(
+              `https://api.themoviedb.org/3/${endpoint}/${swipe.content_id}?api_key=${TMDB_API_KEY}`
+            );
+            const content = await res.json();
+            return { ...content, type: swipe.content_type };
+          })
+        );
+        setMyLikes(likedContent);
       }
     } catch (err) {
-      console.error('Error checking couple status:', err);
+      console.error('Error loading likes:', err);
     }
   };
 
@@ -106,17 +119,10 @@ export default function CoupleWatch() {
         result = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: {
-              display_name: displayName
-            }
-          }
+          options: { data: { display_name: displayName } }
         });
       } else {
-        result = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
+        result = await supabase.auth.signInWithPassword({ email, password });
       }
 
       if (result.error) {
@@ -124,46 +130,6 @@ export default function CoupleWatch() {
       }
     } catch (err) {
       setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCoupleLink = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      // Find partner by code
-      const { data: partnerData, error: findError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('couple_code', partnerCode.toUpperCase())
-        .single();
-
-      if (findError || !partnerData) {
-        setError('Partner code not found');
-        setLoading(false);
-        return;
-      }
-
-      // Update both users
-      await supabase
-        .from('users')
-        .update({ partner_id: partnerData.id })
-        .eq('id', user.id);
-      
-      await supabase
-        .from('users')
-        .update({ partner_id: user.id })
-        .eq('id', partnerData.id);
-
-      setPartnerId(partnerData.id);
-      setCoupled(true);
-      setView('swipe');
-    } catch (err) {
-      setError(err.message || 'Failed to link with partner');
     } finally {
       setLoading(false);
     }
@@ -193,80 +159,25 @@ export default function CoupleWatch() {
     }
   };
 
-  const loadMatches = async (userId, pId) => {
-    try {
-      const { data } = await supabase
-        .from('swipes')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_match', true);
-
-      if (data) {
-        const matchedContent = await Promise.all(
-          data.map(async (swipe) => {
-            const endpoint = swipe.content_type === 'movie' ? 'movie' : 'tv';
-            const res = await fetch(
-              `https://api.themoviedb.org/3/${endpoint}/${swipe.content_id}?api_key=${TMDB_API_KEY}`
-            );
-            const content = await res.json();
-            return { ...content, type: swipe.content_type };
-          })
-        );
-        setMatches(matchedContent);
-      }
-    } catch (err) {
-      console.error('Error loading matches:', err);
-    }
-  };
-
   const handleSwipe = async (liked) => {
-    if (!currentContent || !user || !partnerId) return;
-
-    const swipeData = {
-      user_id: user.id,
-      content_id: currentContent.id,
-      content_type: currentContent.type,
-      liked: liked,
-      is_match: false
-    };
+    if (!currentContent || !user) return;
 
     try {
       // Save swipe
-      await supabase.from('swipes').insert(swipeData);
+      await supabase.from('swipes').insert({
+        user_id: user.id,
+        content_id: currentContent.id,
+        content_type: currentContent.type,
+        liked: liked,
+        is_match: false
+      });
 
-      // Check if partner swiped right on same content
+      // Add to my likes if liked
       if (liked) {
-        const { data: partnerSwipe } = await supabase
-          .from('swipes')
-          .select('*')
-          .eq('user_id', partnerId)
-          .eq('content_id', currentContent.id)
-          .eq('content_type', currentContent.type)
-          .eq('liked', true);
-
-        if (partnerSwipe && partnerSwipe.length > 0) {
-          // It's a match!
-          await supabase
-            .from('swipes')
-            .update({ is_match: true })
-            .eq('user_id', user.id)
-            .eq('content_id', currentContent.id);
-
-          await supabase
-            .from('swipes')
-            .update({ is_match: true })
-            .eq('user_id', partnerId)
-            .eq('content_id', currentContent.id);
-
-          setMatches(prev => [...prev, currentContent]);
-          
-          setTimeout(() => {
-            alert(`🎉 It's a match! You both want to watch ${currentContent.title || currentContent.name}!`);
-          }, 300);
-        }
+        setMyLikes(prev => [...prev, currentContent]);
       }
 
-      // Move to next content
+      // Move to next
       const newQueue = contentQueue.slice(1);
       setContentQueue(newQueue);
       setCurrentContent(newQueue[0] || null);
@@ -279,12 +190,78 @@ export default function CoupleWatch() {
     }
   };
 
+  const handleCompare = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      // Find user by code
+      const { data: otherUser, error: findError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('couple_code', compareCode.toUpperCase())
+        .single();
+
+      if (findError || !otherUser) {
+        setError('Code not found');
+        setLoading(false);
+        return;
+      }
+
+      // Get their likes
+      const { data: theirSwipes } = await supabase
+        .from('swipes')
+        .select('*')
+        .eq('user_id', otherUser.id)
+        .eq('liked', true);
+
+      if (!theirSwipes) {
+        setMatches([]);
+        setView('matches');
+        setLoading(false);
+        return;
+      }
+
+      // Find common content
+      const mySwipes = await supabase
+        .from('swipes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('liked', true);
+
+      const commonContent = [];
+      
+      for (const mySwipe of mySwipes.data || []) {
+        const match = theirSwipes.find(
+          s => s.content_id === mySwipe.content_id && s.content_type === mySwipe.content_type
+        );
+        
+        if (match) {
+          const endpoint = mySwipe.content_type === 'movie' ? 'movie' : 'tv';
+          const res = await fetch(
+            `https://api.themoviedb.org/3/${endpoint}/${mySwipe.content_id}?api_key=${TMDB_API_KEY}`
+          );
+          const content = await res.json();
+          commonContent.push({ ...content, type: mySwipe.content_type });
+        }
+      }
+
+      setMatches(commonContent);
+      setView('matches');
+      setShowCodePopup(false);
+    } catch (err) {
+      setError(err.message || 'Failed to compare');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setView('auth');
-    setCoupled(false);
-    setPartnerId(null);
+    setMyLikes([]);
     setMatches([]);
     setContentQueue([]);
   };
@@ -307,9 +284,7 @@ export default function CoupleWatch() {
             <button
               onClick={() => setAuthMode('signin')}
               className={`flex-1 py-2 rounded-lg font-medium transition ${
-                authMode === 'signin'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-gray-100 text-gray-600'
+                authMode === 'signin' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
               Sign In
@@ -317,9 +292,7 @@ export default function CoupleWatch() {
             <button
               onClick={() => setAuthMode('signup')}
               className={`flex-1 py-2 rounded-lg font-medium transition ${
-                authMode === 'signup'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-gray-100 text-gray-600'
+                authMode === 'signup' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
               Sign Up
@@ -368,74 +341,9 @@ export default function CoupleWatch() {
     );
   }
 
-  if (view === 'setup') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-500 via-red-500 to-orange-500 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <Users className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">Link with Your Partner</h2>
-            <p className="text-gray-600">Share your code or enter theirs</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-pink-100 to-red-100 rounded-xl p-6 mb-6">
-            <p className="text-sm text-gray-600 mb-2">Your Couple Code</p>
-            <div className="flex items-center justify-between bg-white rounded-lg p-4">
-              <span className="text-3xl font-bold text-red-500 tracking-wider">{myCode}</span>
-              <button
-                onClick={() => navigator.clipboard.writeText(myCode)}
-                className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 transition"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">OR</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleCoupleLink} className="space-y-4">
-            <input
-              type="text"
-              placeholder="Enter Partner's Code"
-              value={partnerCode}
-              onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition text-center text-2xl tracking-wider font-semibold"
-              maxLength={6}
-              required
-            />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50"
-            >
-              {loading ? 'Connecting...' : 'Link Together'}
-            </button>
-          </form>
-
-          <button
-            onClick={handleSignOut}
-            className="w-full mt-4 text-gray-500 text-sm hover:text-gray-700 flex items-center justify-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (view === 'swipe') {
     return (
       <div className="min-h-screen bg-gray-900">
-        {/* Header */}
         <div className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-4 shadow-lg">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -444,23 +352,26 @@ export default function CoupleWatch() {
             </h1>
             <div className="flex gap-3">
               <button
-                onClick={() => setView('matches')}
+                onClick={() => setShowCodePopup(true)}
+                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition flex items-center gap-2"
+              >
+                <Search className="w-5 h-5" />
+                Compare
+              </button>
+              <button
+                onClick={() => setView('mylikes')}
                 className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition flex items-center gap-2"
               >
                 <Flame className="w-5 h-5" />
-                {matches.length}
+                {myLikes.length}
               </button>
-              <button
-                onClick={handleSignOut}
-                className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition"
-              >
+              <button onClick={handleSignOut} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition">
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Swipe Area */}
         <div className="max-w-md mx-auto p-4 pt-8">
           {currentContent ? (
             <div className="relative">
@@ -498,13 +409,10 @@ export default function CoupleWatch() {
                       ? new Date(currentContent.release_date || currentContent.first_air_date).getFullYear()
                       : ''}
                   </p>
-                  <p className="text-gray-300 text-sm line-clamp-3">
-                    {currentContent.overview}
-                  </p>
+                  <p className="text-gray-300 text-sm line-clamp-3">{currentContent.overview}</p>
                 </div>
               </div>
 
-              {/* Swipe Buttons */}
               <div className="flex justify-center gap-8 mt-8">
                 <button
                   onClick={() => handleSwipe(false)}
@@ -527,6 +435,103 @@ export default function CoupleWatch() {
             </div>
           )}
         </div>
+
+        {/* Compare Code Popup */}
+        {showCodePopup && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-md">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Compare Watchlists</h2>
+              
+              <div className="bg-pink-100 rounded-xl p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-2">Your Code</p>
+                <div className="flex items-center justify-between bg-white rounded-lg p-3">
+                  <span className="text-2xl font-bold text-red-500">{myCode}</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(myCode)}
+                    className="bg-red-500 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleCompare} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Enter Their Code"
+                  value={compareCode}
+                  onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
+                  maxLength={6}
+                  required
+                />
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCodePopup(false)}
+                    className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {loading ? 'Finding...' : 'Find Matches'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (view === 'mylikes') {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <div className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-4 shadow-lg">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <button onClick={() => setView('swipe')} className="text-white hover:text-gray-200">
+              ← Back
+            </button>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Flame className="w-6 h-6" />
+              My Likes
+            </h1>
+            <div className="w-16"></div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-4">
+          {myLikes.length === 0 ? (
+            <div className="text-center text-white py-20">
+              <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-xl text-gray-400">No likes yet</p>
+              <p className="text-gray-500 mt-2">Start swiping!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {myLikes.map((item, idx) => (
+                <div key={idx} className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
+                  <img
+                    src={`https://image.tmdb.org/t/p/w500${item.poster_path}`}
+                    alt={item.title || item.name}
+                    className="w-full h-64 object-cover"
+                  />
+                  <div className="p-4">
+                    <h3 className="text-white font-semibold text-sm line-clamp-2">
+                      {item.title || item.name}
+                    </h3>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -534,35 +539,30 @@ export default function CoupleWatch() {
   if (view === 'matches') {
     return (
       <div className="min-h-screen bg-gray-900">
-        {/* Header */}
         <div className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-4 shadow-lg">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <button
-              onClick={() => setView('swipe')}
-              className="text-white hover:text-gray-200"
-            >
+            <button onClick={() => setView('swipe')} className="text-white hover:text-gray-200">
               ← Back
             </button>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Flame className="w-6 h-6" />
-              Your Matches
+              <Check className="w-6 h-6" />
+              Common Matches
             </h1>
             <div className="w-16"></div>
           </div>
         </div>
 
-        {/* Matches Grid */}
         <div className="max-w-4xl mx-auto p-4">
           {matches.length === 0 ? (
             <div className="text-center text-white py-20">
               <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-xl text-gray-400">No matches yet</p>
-              <p className="text-gray-500 mt-2">Keep swiping to find what you both love!</p>
+              <p className="text-xl text-gray-400">No common matches</p>
+              <p className="text-gray-500 mt-2">Keep swiping or try another friend!</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {matches.map((match, idx) => (
-                <div key={idx} className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+                <div key={idx} className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
                   <div className="relative">
                     <img
                       src={`https://image.tmdb.org/t/p/w500${match.poster_path}`}
@@ -577,11 +577,6 @@ export default function CoupleWatch() {
                     <h3 className="text-white font-semibold text-sm line-clamp-2">
                       {match.title || match.name}
                     </h3>
-                    <p className="text-gray-400 text-xs mt-1">
-                      {match.release_date || match.first_air_date
-                        ? new Date(match.release_date || match.first_air_date).getFullYear()
-                        : ''}
-                    </p>
                   </div>
                 </div>
               ))}
