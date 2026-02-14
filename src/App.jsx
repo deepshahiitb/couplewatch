@@ -182,16 +182,21 @@ export default function CoupleWatch() {
     let params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       language: 'en-US',
-      page: Math.floor(Math.random() * 3) + 1,
-      'vote_count.gte': 100
+      page: Math.floor(Math.random() * 3) + 1
     });
+
+    // Min vote count (ensures quality)
+    if (sortBy === 'top_rated') {
+      params.append('vote_count.gte', 500);
+    } else {
+      params.append('vote_count.gte', 100);
+    }
 
     // Sort by
     if (sortBy === 'popular') {
       params.append('sort_by', 'popularity.desc');
     } else if (sortBy === 'top_rated') {
       params.append('sort_by', 'vote_average.desc');
-      params.append('vote_count.gte', 500);
     } else if (sortBy === 'newest') {
       params.append('sort_by', isMovie ? 'release_date.desc' : 'first_air_date.desc');
     }
@@ -201,7 +206,7 @@ export default function CoupleWatch() {
       params.append('with_genres', genres.join(','));
     }
 
-    // Min rating
+    // Min rating - CRITICAL FIX
     if (minRating > 0) {
       params.append('vote_average.gte', minRating);
     }
@@ -646,10 +651,24 @@ export default function CoupleWatch() {
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar - Desktop */}
           <div className="hidden lg:block w-64 bg-gray-800 p-4 overflow-y-auto flex-shrink-0">
-            <h2 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Filters
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white font-bold text-lg flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Filters
+              </h2>
+              <button
+                onClick={() => setFilters({
+                  contentTypes: ['movie', 'tv'],
+                  genres: [],
+                  sortBy: 'popular',
+                  minRating: 0,
+                  releasePeriod: 'all'
+                })}
+                className="text-xs text-pink-400 hover:text-pink-300 underline"
+              >
+                Clear All
+              </button>
+            </div>
             
             {/* Content Type */}
             <div className="mb-6">
@@ -754,7 +773,7 @@ export default function CoupleWatch() {
           {showFilters && (
             <div className="lg:hidden fixed inset-0 bg-black/70 z-50" onClick={() => setShowFilters(false)}>
               <div className="bg-gray-800 w-80 h-full p-4 overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-2">
                   <h2 className="text-white font-bold text-lg flex items-center gap-2">
                     <Filter className="w-5 h-5" />
                     Filters
@@ -763,6 +782,21 @@ export default function CoupleWatch() {
                     <X className="w-6 h-6" />
                   </button>
                 </div>
+
+                <button
+                  onClick={() => {
+                    setFilters({
+                      contentTypes: ['movie', 'tv'],
+                      genres: [],
+                      sortBy: 'popular',
+                      minRating: 0,
+                      releasePeriod: 'all'
+                    });
+                  }}
+                  className="text-sm text-pink-400 hover:text-pink-300 underline mb-4 w-full text-left"
+                >
+                  Clear All Filters
+                </button>
 
                 {/* Same filters as desktop */}
                 <div className="mb-6">
@@ -862,9 +896,9 @@ export default function CoupleWatch() {
           )}
 
           {/* Main Content */}
-          <div className="flex-1 flex flex-col items-center justify-center p-3 overflow-hidden">
+          <div className="flex-1 flex flex-col items-center overflow-hidden">
             {currentContent ? (
-              <div className="w-full max-w-sm flex flex-col h-full justify-center">
+              <div className="w-full max-w-sm flex flex-col h-full py-2">
                 <div 
                   ref={cardRef}
                   className="flex-shrink-0"
@@ -884,8 +918,8 @@ export default function CoupleWatch() {
                   onMouseLeave={handleMouseUp}
                 >
                   <div className="bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-                    {/* Poster - 55% of available height */}
-                    <div className="relative" style={{ height: 'calc((100vh - 200px) * 0.55)' }}>
+                    {/* Poster - 65% of available height for bigger poster */}
+                    <div className="relative" style={{ height: 'calc((100vh - 140px) * 0.65)' }}>
                       <img
                         src={`https://image.tmdb.org/t/p/w500${currentContent.poster_path}`}
                         alt={currentContent.title || currentContent.name}
