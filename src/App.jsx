@@ -184,6 +184,18 @@ export default function CoupleWatch() {
       } else if (data) {
         console.log('10. Existing user found, code:', data.couple_code);
         setMyCode(data.couple_code);
+        
+        // If display_name is still "User" but we have actual name in metadata, update it
+        const userEmail = session?.user?.email || '';
+        const userName = session?.user?.user_metadata?.display_name || 'User';
+        
+        if (data.display_name === 'User' && userName !== 'User') {
+          console.log('11. Updating display_name from "User" to:', userName);
+          await supabase.from('users').update({
+            display_name: userName,
+            email: userEmail
+          }).eq('id', userId);
+        }
       }
       
       await loadMyLikes(userId);
@@ -553,68 +565,93 @@ export default function CoupleWatch() {
     try {
       console.log('5. Searching for user with code:', compareCode.toUpperCase());
       
-      const { data: otherUser, error: findError } = await supabase
+      // Don't use .single() - it fails if no results or multiple results
+      const { data: users, error: findError } = await supabase
         .from('users')
         .select('*')
-        .eq('couple_code', compareCode.toUpperCase())
-        .single();
+        .eq('couple_code', compareCode.toUpperCase());
 
-      console.log('6. Search result:', { otherUser, findError });
+      console.log('6. Search result:', { users, findError });
 
       if (findError) {
         console.error('7. Find error occurred:', findError);
-        setError(`Code not found. Error: ${findError.message}`);
+        setError(`Database error: ${findError.message}`);
         setLoading(false);
         return;
       }
 
-      if (!otherUser) {
+      if (!users || users.length === 0) {
         console.error('8. No user found with code:', compareCode.toUpperCase());
-        setError('Code not found');
+        setError('Code not found - please check the code and try again');
         setLoading(false);
         return;
       }
 
-      console.log('9. Found user:', otherUser);
+      if (users.length > 1) {
+        console.error('9. Multiple users found with code (should not happen):', users);
+        setError('Multiple users found with this code - please contact support');
+        setLoading(false);
+        return;
+      }
+
+      const otherUser = users[0];
+      console.log('10. Found user:', otherUser);
+
+      // Check if trying to add yourself
+      if (otherUser.id === user.id) {
+        console.error('11. Cannot add yourself as friend');
+        setError('You cannot add yourself as a friend!');
+        setLoading(false);
+        return;
+      }
 
       // Check if already friends
-      console.log('10. Checking if already friends...');
-      const { data: existingFriend } = await supabase
+      console.log('12. Checking if already friends...');
+      const { data: existingFriends } = await supabase
         .from('friends')
         .select('*')
         .eq('user_id', user.id)
-        .eq('friend_id', otherUser.id)
-        .single();
+        .eq('friend_id', otherUser.id);
 
-      console.log('11. Existing friendship:', existingFriend);
+      console.log('13. Existing friendship:', existingFriends);
 
-      if (!existingFriend) {
-        console.log('12. Adding new friend relationship...');
-        const { error: insertError } = await supabase.from('friends').insert({
+      if (!existingFriends || existingFriends.length === 0) {
+        console.log('14. Adding new friend relationship (both directions)...');
+        
+        // Add friendship in BOTH directions for mutual relationship
+        const { error: insertError1 } = await supabase.from('friends').insert({
           user_id: user.id,
           friend_id: otherUser.id
         });
 
-        if (insertError) {
-          console.error('13. Insert error:', insertError);
+        const { error: insertError2 } = await supabase.from('friends').insert({
+          user_id: otherUser.id,
+          friend_id: user.id
+        });
+
+        if (insertError1 || insertError2) {
+          console.error('15. Insert error:', insertError1 || insertError2);
+          setError(`Failed to add friend: ${(insertError1 || insertError2).message}`);
+          setLoading(false);
+          return;
         } else {
-          console.log('14. Friend added successfully!');
+          console.log('16. Friend added successfully (mutual friendship created)!');
         }
 
         // Reload friends list
-        console.log('15. Reloading friends list...');
+        console.log('17. Reloading friends list...');
         await loadFriends(user.id);
-        console.log('16. Friends list reloaded');
+        console.log('18. Friends list reloaded');
       } else {
-        console.log('12. Already friends!');
+        console.log('14. Already friends!');
       }
 
       // Now show matches with this friend
-      console.log('17. Showing matches with friend...');
+      console.log('19. Showing matches with friend...');
       await showMatchesWithFriend(otherUser);
       setShowCodePopup(false);
       setCompareCode('');
-      console.log('18. Done!');
+      console.log('20. Done!');
 
     } catch (err) {
       console.error('ERROR in handleAddFriend:', err);
