@@ -111,7 +111,12 @@ export default function CoupleWatch() {
 
   useEffect(() => {
     if (user && view === 'swipe') {
-      loadContent();
+      console.log('🔄 Filters changed, reloading content...', filters);
+      // Small delay to ensure state has updated
+      const timer = setTimeout(() => {
+        loadContent();
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [user, view, filters]);
 
@@ -268,10 +273,26 @@ export default function CoupleWatch() {
   const buildTMDBUrl = () => {
     const { contentTypes, genres, sortBy, minRating, releasePeriod } = filters;
     
+    console.log('📊 Building TMDB URL with filters:', {
+      contentTypes,
+      genres,
+      sortBy,
+      minRating,
+      releasePeriod
+    });
+    
+    // Safety check
+    if (!contentTypes || contentTypes.length === 0) {
+      console.error('⚠️ No content types selected! Defaulting to both.');
+      return buildTMDBUrl(); // This shouldn't happen, but just in case
+    }
+    
     // Determine which content type to fetch (alternate if both selected)
     const contentType = contentTypes.length === 1 
       ? contentTypes[0] 
       : contentTypes[Math.floor(Math.random() * contentTypes.length)];
+    
+    console.log('   Selected content type for this fetch:', contentType);
     
     const isMovie = contentType === 'movie';
     let endpoint = isMovie ? 'discover/movie' : 'discover/tv';
@@ -725,16 +746,21 @@ export default function CoupleWatch() {
   };
 
   const toggleFilter = (filterType, value) => {
+    console.log('🎚️ Toggle filter:', filterType, value);
     setFilters(prev => {
       if (filterType === 'contentTypes') {
         const newTypes = prev.contentTypes.includes(value)
           ? prev.contentTypes.filter(t => t !== value)
           : [...prev.contentTypes, value];
-        return { ...prev, contentTypes: newTypes.length > 0 ? newTypes : prev.contentTypes };
+        // Must have at least one content type selected
+        const finalTypes = newTypes.length > 0 ? newTypes : prev.contentTypes;
+        console.log('   Content types changing from', prev.contentTypes, 'to', finalTypes);
+        return { ...prev, contentTypes: finalTypes };
       } else if (filterType === 'genres') {
         const newGenres = prev.genres.includes(value)
           ? prev.genres.filter(g => g !== value)
           : [...prev.genres, value];
+        console.log('   Genres changing from', prev.genres, 'to', newGenres);
         return { ...prev, genres: newGenres };
       }
       return prev;
