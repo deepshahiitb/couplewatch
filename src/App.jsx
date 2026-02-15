@@ -121,6 +121,13 @@ export default function CoupleWatch() {
     }
   }, [currentContent]);
 
+  useEffect(() => {
+    // Reload friends list when friends view is opened
+    if (user && view === 'friends') {
+      loadFriends(user.id);
+    }
+  }, [user, view]);
+
   const loadCast = async () => {
     if (!currentContent) return;
     try {
