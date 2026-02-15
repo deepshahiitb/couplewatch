@@ -955,7 +955,13 @@ export default function CoupleWatch() {
                     type="radio"
                     name="sortBy"
                     checked={filters.sortBy === sort}
-                    onChange={() => setFilters(prev => ({ ...prev, sortBy: sort }))}
+                    onChange={() => {
+                      console.log('🔘 Sort By clicked:', sort);
+                      setFilters(prev => {
+                        console.log('   Changing from', prev.sortBy, 'to', sort);
+                        return { ...prev, sortBy: sort };
+                      });
+                    }}
                     className="w-4 h-4 accent-pink-500"
                   />
                   {sort === 'popular' && 'Most Popular'}
@@ -976,7 +982,14 @@ export default function CoupleWatch() {
                 max="9"
                 step="1"
                 value={filters.minRating}
-                onChange={(e) => setFilters(prev => ({ ...prev, minRating: parseInt(e.target.value) }))}
+                onChange={(e) => {
+                  const newRating = parseInt(e.target.value);
+                  console.log('📊 Rating slider moved to:', newRating);
+                  setFilters(prev => {
+                    console.log('   Changing from', prev.minRating, 'to', newRating);
+                    return { ...prev, minRating: newRating };
+                  });
+                }}}
                 className="w-full accent-pink-500"
               />
             </div>
@@ -990,7 +1003,13 @@ export default function CoupleWatch() {
                     type="radio"
                     name="releasePeriod"
                     checked={filters.releasePeriod === period}
-                    onChange={() => setFilters(prev => ({ ...prev, releasePeriod: period }))}
+                    onChange={() => {
+                      console.log('📅 Release period clicked:', period);
+                      setFilters(prev => {
+                        console.log('   Changing from', prev.releasePeriod, 'to', period);
+                        return { ...prev, releasePeriod: period };
+                      });
+                    }}
                     className="w-4 h-4 accent-pink-500"
                   />
                   {period === 'all' && 'All Time'}
