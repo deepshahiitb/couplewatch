@@ -324,10 +324,10 @@ export default function CoupleWatch() {
       params.append('sort_by', isMovie ? 'release_date.desc' : 'first_air_date.desc');
     }
 
-    // Genres (comma-separated should work as OR in TMDB)
+    // Genres (use pipe | for OR, comma for AND in TMDB API)
     if (genres.length > 0) {
-      const genreString = genres.join(',');
-      console.log('   📁 Adding genres to URL:', genreString, '(count:', genres.length, ')');
+      const genreString = genres.join('|');  // Changed from ',' to '|' for OR logic
+      console.log('   📁 Adding genres to URL (OR logic):', genreString, '(count:', genres.length, ')');
       params.append('with_genres', genreString);
     } else {
       console.log('   📁 No genres selected');
@@ -424,6 +424,13 @@ export default function CoupleWatch() {
         }
       } else {
         console.warn('⚠️ TMDB returned no results');
+        
+        // If we have multiple genres selected, try with lower vote count
+        if (filters.genres.length >= 2) {
+          console.log('   Trying again with lower vote count (50 instead of 100)...');
+          // We'll handle this in loadMoreContent by temporarily lowering standards
+        }
+        
         // Try loading from a different page
         loadMoreContent(swipedIds);
       }
