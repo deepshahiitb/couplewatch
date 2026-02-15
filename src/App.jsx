@@ -63,6 +63,8 @@ export default function CoupleWatch() {
   const [contentQueue, setContentQueue] = useState([]);
   const [myLikes, setMyLikes] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [selectedFriend, setSelectedFriend] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCodePopup, setShowCodePopup] = useState(false);
@@ -143,22 +145,51 @@ export default function CoupleWatch() {
         .single();
       
       if (error && error.code === 'PGRST116') {
+        // User doesn't exist, create them
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        await supabase.from('users').insert({
+        const { data: newUser } = await supabase.from('users').insert({
           id: userId,
-          email: user?.email,
+          email: email || '',
           display_name: displayName || 'User',
           couple_code: code
-        });
-        setMyCode(code);
+        }).select().single();
+        
+        if (newUser) {
+          setMyCode(newUser.couple_code);
+        } else {
+          setMyCode(code);
+        }
       } else if (data) {
         setMyCode(data.couple_code);
       }
       
       await loadMyLikes(userId);
+      await loadFriends(userId);
       setView('swipe');
     } catch (err) {
       console.error('Error initializing user:', err);
+    }
+  };
+
+  const loadFriends = async (userId) => {
+    try {
+      const { data } = await supabase
+        .from('friends')
+        .select('friend_id')
+        .eq('user_id', userId);
+
+      if (data && data.length > 0) {
+        // Get friend details
+        const friendIds = data.map(f => f.friend_id);
+        const { data: friendsData } = await supabase
+          .from('users')
+          .select('id, display_name, couple_code')
+          .in('id', friendIds);
+
+        setFriends(friendsData || []);
+      }
+    } catch (err) {
+      console.error('Error loading friends:', err);
     }
   };
 
@@ -485,7 +516,7 @@ export default function CoupleWatch() {
     setIsDragging(false);
   };
 
-  const handleCompare = async (e) => {
+  const handleAddFriend = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -503,10 +534,46 @@ export default function CoupleWatch() {
         return;
       }
 
+      // Check if already friends
+      const { data: existingFriend } = await supabase
+        .from('friends')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('friend_id', otherUser.id)
+        .single();
+
+      if (!existingFriend) {
+        // Add friend
+        await supabase.from('friends').insert({
+          user_id: user.id,
+          friend_id: otherUser.id
+        });
+
+        // Reload friends list
+        await loadFriends(user.id);
+      }
+
+      // Now show matches with this friend
+      await showMatchesWithFriend(otherUser);
+      setShowCodePopup(false);
+      setCompareCode('');
+
+    } catch (err) {
+      setError(err.message || 'Failed to add friend');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showMatchesWithFriend = async (friend) => {
+    setLoading(true);
+    setSelectedFriend(friend);
+
+    try {
       const { data: theirSwipes } = await supabase
         .from('swipes')
         .select('*')
-        .eq('user_id', otherUser.id)
+        .eq('user_id', friend.id)
         .eq('liked', true);
 
       const mySwipes = await supabase
@@ -538,9 +605,8 @@ export default function CoupleWatch() {
 
       setMatches(commonContent);
       setView('matches');
-      setShowCodePopup(false);
     } catch (err) {
-      setError(err.message || 'Failed to compare');
+      console.error('Error loading matches:', err);
     } finally {
       setLoading(false);
     }
@@ -684,11 +750,18 @@ export default function CoupleWatch() {
             </div>
             <div className="flex gap-2 lg:gap-3">
               <button
+                onClick={() => setView('friends')}
+                className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
+              >
+                <Users className="w-4 h-4 lg:w-5 lg:h-5" />
+                <span className="hidden sm:inline">{friends.length}</span>
+              </button>
+              <button
                 onClick={() => setShowCodePopup(true)}
                 className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
               >
                 <Search className="w-4 h-4 lg:w-5 lg:h-5" />
-                <span className="hidden sm:inline">Compare</span>
+                <span className="hidden sm:inline">Add</span>
               </button>
               <button
                 onClick={() => setView('mylikes')}
@@ -1090,11 +1163,11 @@ export default function CoupleWatch() {
           </div>
         </div>
 
-        {/* Compare Popup */}
+        {/* Add Friend Popup */}
         {showCodePopup && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowCodePopup(false)}>
             <div className="bg-white rounded-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Compare Watchlists</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Add Friend</h2>
               
               <div className="bg-pink-100 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-600 mb-2">Your Code</p>
@@ -1105,6 +1178,42 @@ export default function CoupleWatch() {
                     className="bg-red-500 text-white px-3 py-1 rounded text-sm"
                   >
                     Copy
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Share this code with friends</p>
+              </div>
+
+              <form onSubmit={handleAddFriend} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Enter Friend's Code"
+                  value={compareCode}
+                  onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
+                  maxLength={6}
+                  required
+                />
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCodePopup(false)}
+                    className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {loading ? 'Adding...' : 'Add Friend'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
                   </button>
                 </div>
               </div>
@@ -1190,7 +1299,7 @@ export default function CoupleWatch() {
     );
   }
 
-  if (view === 'matches') {
+  if (view === 'friends') {
     return (
       <div className="min-h-screen bg-gray-900">
         <div className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-4 shadow-lg">
@@ -1199,8 +1308,73 @@ export default function CoupleWatch() {
               ← Back
             </button>
             <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Users className="w-6 h-6" />
+              Friends
+            </h1>
+            <button
+              onClick={() => setShowCodePopup(true)}
+              className="text-white hover:text-gray-200 text-sm"
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-4">
+          {friends.length === 0 ? (
+            <div className="text-center text-white py-20">
+              <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-xl text-gray-400">No friends yet</p>
+              <p className="text-gray-500 mt-2">Add friends to compare watchlists!</p>
+              <button
+                onClick={() => setShowCodePopup(true)}
+                className="mt-6 bg-gradient-to-r from-pink-500 to-red-500 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition"
+              >
+                Add Your First Friend
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {friends.map((friend) => (
+                <div
+                  key={friend.id}
+                  onClick={() => showMatchesWithFriend(friend)}
+                  className="bg-gray-800 rounded-xl p-4 flex items-center justify-between hover:bg-gray-700 cursor-pointer transition group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-lg">
+                        {friend.display_name?.charAt(0).toUpperCase() || 'F'}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-white font-semibold">{friend.display_name}</h3>
+                      <p className="text-gray-400 text-sm">Code: {friend.couple_code}</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white transition" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'matches') {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <div className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-4 shadow-lg">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <button onClick={() => setView('friends')} className="text-white hover:text-gray-200">
+              ← Back
+            </button>
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-center">
               <Check className="w-6 h-6" />
-              Common Matches
+              <span>
+                {selectedFriend ? `with ${selectedFriend.display_name}` : 'Matches'}
+              </span>
             </h1>
             <div className="w-16"></div>
           </div>
@@ -1210,8 +1384,12 @@ export default function CoupleWatch() {
           {matches.length === 0 ? (
             <div className="text-center text-white py-20">
               <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-xl text-gray-400">No common matches</p>
-              <p className="text-gray-500 mt-2">Keep swiping or try another friend!</p>
+              <p className="text-xl text-gray-400">No common matches yet</p>
+              <p className="text-gray-500 mt-2">
+                {selectedFriend 
+                  ? `Keep swiping to find what you both like!` 
+                  : 'Add friends to compare watchlists!'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
