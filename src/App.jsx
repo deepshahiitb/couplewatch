@@ -112,6 +112,9 @@ export default function CoupleWatch() {
   useEffect(() => {
     if (user && view === 'swipe') {
       console.log('🔄 Filters changed, reloading content...', filters);
+      // Clear existing content immediately when filters change
+      setContentQueue([]);
+      setCurrentContent(null);
       // Small delay to ensure state has updated
       const timer = setTimeout(() => {
         loadContent();
