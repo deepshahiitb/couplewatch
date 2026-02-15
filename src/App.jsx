@@ -138,6 +138,9 @@ export default function CoupleWatch() {
 
   const initializeUser = async (userId) => {
     try {
+      // Get current session to access user metadata
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -147,14 +150,20 @@ export default function CoupleWatch() {
       if (error && error.code === 'PGRST116') {
         // User doesn't exist, create them
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const { data: newUser } = await supabase.from('users').insert({
+        const userEmail = session?.user?.email || '';
+        const userName = session?.user?.user_metadata?.display_name || 'User';
+        
+        const { data: newUser, error: insertError } = await supabase.from('users').insert({
           id: userId,
-          email: email || '',
-          display_name: displayName || 'User',
+          email: userEmail,
+          display_name: userName,
           couple_code: code
         }).select().single();
         
-        if (newUser) {
+        if (insertError) {
+          console.error('Insert error:', insertError);
+          setMyCode(code);
+        } else if (newUser) {
           setMyCode(newUser.couple_code);
         } else {
           setMyCode(code);
@@ -754,21 +763,14 @@ export default function CoupleWatch() {
                 className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
               >
                 <Users className="w-4 h-4 lg:w-5 lg:h-5" />
-                <span className="hidden sm:inline">{friends.length}</span>
-              </button>
-              <button
-                onClick={() => setShowCodePopup(true)}
-                className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
-              >
-                <Search className="w-4 h-4 lg:w-5 lg:h-5" />
-                <span className="hidden sm:inline">Add</span>
+                <span className="hidden sm:inline">Friends ({friends.length})</span>
               </button>
               <button
                 onClick={() => setView('mylikes')}
                 className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
               >
                 <Flame className="w-4 h-4 lg:w-5 lg:h-5" />
-                {myLikes.length}
+                <span className="hidden sm:inline">Likes ({myLikes.length})</span>
               </button>
               <button onClick={handleSignOut} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition">
                 <LogOut className="w-4 h-4 lg:w-5 lg:h-5" />
