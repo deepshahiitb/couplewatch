@@ -308,12 +308,9 @@ export default function CoupleWatch() {
       page: Math.floor(Math.random() * 3) + 1
     });
 
-    // Min vote count (ensures quality, but lower for high rating filters)
+    // Min vote count (ensures quality)
     if (sortBy === 'top_rated') {
       params.append('vote_count.gte', 500);
-    } else if (minRating >= 8) {
-      // For high rating filters, use lower vote count to get more results
-      params.append('vote_count.gte', 20);
     } else {
       params.append('vote_count.gte', 100);
     }
@@ -327,9 +324,13 @@ export default function CoupleWatch() {
       params.append('sort_by', isMovie ? 'release_date.desc' : 'first_air_date.desc');
     }
 
-    // Genres
+    // Genres (comma-separated should work as OR in TMDB)
     if (genres.length > 0) {
-      params.append('with_genres', genres.join(','));
+      const genreString = genres.join(',');
+      console.log('   📁 Adding genres to URL:', genreString, '(count:', genres.length, ')');
+      params.append('with_genres', genreString);
+    } else {
+      console.log('   📁 No genres selected');
     }
 
     // Min rating - CRITICAL FIX
@@ -348,7 +349,9 @@ export default function CoupleWatch() {
       params.append(isMovie ? 'primary_release_date.lte' : 'first_air_date.lte', '1999-12-31');
     }
 
-    return `https://api.themoviedb.org/3/${endpoint}?${params.toString()}`;
+    const finalUrl = `https://api.themoviedb.org/3/${endpoint}?${params.toString()}`;
+    console.log('   🌐 Final TMDB URL:', finalUrl);
+    return finalUrl;
   };
 
   const loadContent = async () => {
@@ -1016,7 +1019,7 @@ export default function CoupleWatch() {
               <input
                 type="range"
                 min="0"
-                max="9"
+                max="8"
                 step="1"
                 value={filters.minRating}
                 onChange={(e) => {
