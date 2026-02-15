@@ -373,6 +373,10 @@ export default function CoupleWatch() {
 
         console.log('   Before rating filter:', unseenContent.length, 'items');
         console.log('   Current filters.minRating:', filters.minRating);
+        console.log('   Sample ratings:', unseenContent.slice(0, 5).map(i => ({
+          title: i.title || i.name,
+          rating: i.vote_average
+        })));
 
         // CRITICAL: Client-side rating filter as backup
         if (filters.minRating > 0) {
