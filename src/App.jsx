@@ -77,6 +77,7 @@ export default function CoupleWatch() {
   const [isExiting, setIsExiting] = useState(false);
   const [exitDirection, setExitDirection] = useState(0);
   const [cast, setCast] = useState([]);
+  const [noContentFound, setNoContentFound] = useState(false);
   const cardRef = useRef(null);
 
   // Filter state
@@ -84,7 +85,7 @@ export default function CoupleWatch() {
     contentTypes: ['movie', 'tv'],
     genres: [],
     sortBy: 'popular',
-    minRating: 0,
+    minRating: 8,
     releasePeriod: 'all'
   });
 
@@ -115,6 +116,7 @@ export default function CoupleWatch() {
       // Clear existing content immediately when filters change
       setContentQueue([]);
       setCurrentContent(null);
+      setNoContentFound(false);
       // Small delay to ensure state has updated
       const timer = setTimeout(() => {
         loadContent();
@@ -306,9 +308,12 @@ export default function CoupleWatch() {
       page: Math.floor(Math.random() * 3) + 1
     });
 
-    // Min vote count (ensures quality)
+    // Min vote count (ensures quality, but lower for high rating filters)
     if (sortBy === 'top_rated') {
       params.append('vote_count.gte', 500);
+    } else if (minRating >= 8) {
+      // For high rating filters, use lower vote count to get more results
+      params.append('vote_count.gte', 20);
     } else {
       params.append('vote_count.gte', 100);
     }
@@ -403,7 +408,21 @@ export default function CoupleWatch() {
         if (unseenContent.length > 0) {
           setContentQueue(unseenContent);
           setCurrentContent(unseenContent[0]);
+          setNoContentFound(false);
+        } else {
+          console.warn('⚠️ No content found matching filters! Trying to load more...');
+          // Wait a bit then check if loadMoreContent found anything
+          setTimeout(() => {
+            if (contentQueue.length === 0) {
+              console.error('❌ Still no content after loading more');
+              setNoContentFound(true);
+            }
+          }, 2000);
         }
+      } else {
+        console.warn('⚠️ TMDB returned no results');
+        // Try loading from a different page
+        loadMoreContent(swipedIds);
       }
 
       // Load more in background (non-blocking)
@@ -1312,6 +1331,31 @@ export default function CoupleWatch() {
                     </div>
                   </div>
                 )}
+              </div>
+            ) : noContentFound ? (
+              <div className="text-center text-white py-20 px-4">
+                <X className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                <p className="text-xl text-gray-300 mb-2">No content found</p>
+                <p className="text-gray-400 text-sm mb-6">
+                  Try adjusting your filters:
+                </p>
+                <ul className="text-gray-400 text-sm space-y-1 mb-6">
+                  <li>• Lower the minimum rating</li>
+                  <li>• Select different genres</li>
+                  <li>• Change the release period</li>
+                </ul>
+                <button
+                  onClick={() => setFilters({
+                    contentTypes: ['movie', 'tv'],
+                    genres: [],
+                    sortBy: 'popular',
+                    minRating: 0,
+                    releasePeriod: 'all'
+                  })}
+                  className="bg-gradient-to-r from-pink-500 to-red-500 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition"
+                >
+                  Reset All Filters
+                </button>
               </div>
             ) : (
               <div className="text-center text-white py-20">
