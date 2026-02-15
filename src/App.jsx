@@ -1214,41 +1214,6 @@ export default function CoupleWatch() {
             </div>
           </div>
         )}
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleCompare} className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Enter Their Code"
-                  value={compareCode}
-                  onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
-                  maxLength={6}
-                  required
-                />
-                {error && <p className="text-red-500 text-sm">{error}</p>}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCodePopup(false)}
-                    className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold disabled:opacity-50"
-                  >
-                    {loading ? 'Finding...' : 'Find Matches'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
