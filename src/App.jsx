@@ -989,7 +989,7 @@ export default function CoupleWatch() {
                     console.log('   Changing from', prev.minRating, 'to', newRating);
                     return { ...prev, minRating: newRating };
                   });
-                }}}
+                }}
                 className="w-full accent-pink-500"
               />
             </div>
