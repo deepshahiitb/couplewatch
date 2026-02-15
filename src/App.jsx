@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, X, Film, Tv, Users, LogOut, Star, Flame, Check, Search, Filter, Menu, ChevronRight } from 'lucide-react';
+import { Heart, X, Film, Tv, Users, Power, Star, Bookmark, Check, Search, Filter, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const TMDB_API_KEY = '76dbff05004b7238127fe74ab6be5e2f';
@@ -844,7 +844,7 @@ export default function CoupleWatch() {
                 onClick={() => setShowFilters(!showFilters)}
                 className="lg:hidden bg-white/20 hover:bg-white/30 p-2 rounded-lg transition"
               >
-                <Menu className="w-5 h-5" />
+                <Filter className="w-5 h-5" />
               </button>
               <h1 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
                 <Heart className="w-5 h-5 lg:w-6 lg:h-6" fill="white" />
@@ -863,11 +863,11 @@ export default function CoupleWatch() {
                 onClick={() => setView('mylikes')}
                 className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm lg:text-base"
               >
-                <Flame className="w-4 h-4 lg:w-5 lg:h-5" />
+                <Bookmark className="w-4 h-4 lg:w-5 lg:h-5" />
                 <span className="hidden sm:inline">Likes ({myLikes.length})</span>
               </button>
               <button onClick={handleSignOut} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition">
-                <LogOut className="w-4 h-4 lg:w-5 lg:h-5" />
+                <Power className="w-4 h-4 lg:w-5 lg:h-5" />
               </button>
             </div>
           </div>
@@ -1323,7 +1323,7 @@ export default function CoupleWatch() {
               ← Back
             </button>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Flame className="w-6 h-6" />
+              <Bookmark className="w-6 h-6" />
               My Likes
             </h1>
             <div className="w-16"></div>
@@ -1381,6 +1381,24 @@ export default function CoupleWatch() {
           </div>
         </div>
 
+        {/* Persistent Code Display */}
+        <div className="bg-gray-800 border-b border-gray-700">
+          <div className="max-w-4xl mx-auto p-4">
+            <div className="bg-gradient-to-r from-pink-500/20 to-red-500/20 rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-xs mb-1">Your Friend Code</p>
+                <p className="text-white font-bold text-xl tracking-wider">{myCode}</p>
+              </div>
+              <button
+                onClick={() => navigator.clipboard.writeText(myCode)}
+                className="bg-gradient-to-r from-pink-500 to-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg transition"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="max-w-4xl mx-auto p-4">
           {friends.length === 0 ? (
             <div className="text-center text-white py-20">
@@ -1420,36 +1438,27 @@ export default function CoupleWatch() {
           )}
         </div>
 
-        {/* Add Friend Popup - Also in Friends view */}
+        {/* Add Friend Popup - Simplified (code shown above) */}
         {showCodePopup && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowCodePopup(false)}>
             <div className="bg-white rounded-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Add Friend</h2>
-              
-              <div className="bg-pink-100 rounded-xl p-4 mb-6">
-                <p className="text-sm text-gray-600 mb-2">Your Code</p>
-                <div className="flex items-center justify-between bg-white rounded-lg p-3">
-                  <span className="text-2xl font-bold text-red-500">{myCode}</span>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(myCode)}
-                    className="bg-red-500 text-white px-3 py-1 rounded text-sm"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Share this code with friends</p>
-              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Add Friend</h2>
 
               <form onSubmit={handleAddFriend} className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Enter Friend's Code"
-                  value={compareCode}
-                  onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
-                  maxLength={6}
-                  required
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter Friend's Code
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="6-CHARACTER CODE"
+                    value={compareCode}
+                    onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
+                    maxLength={6}
+                    required
+                  />
+                </div>
                 {error && <p className="text-red-500 text-sm">{error}</p>}
                 <div className="flex gap-3">
                   <button
