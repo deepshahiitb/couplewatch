@@ -371,12 +371,23 @@ export default function CoupleWatch() {
           item => !swipedIds.has(`${item.type}-${item.id}`)
         );
 
+        console.log('   Before rating filter:', unseenContent.length, 'items');
+        console.log('   Current filters.minRating:', filters.minRating);
+
         // CRITICAL: Client-side rating filter as backup
         if (filters.minRating > 0) {
           unseenContent = unseenContent.filter(
-            item => (item.vote_average || 0) >= filters.minRating
+            item => {
+              const passes = (item.vote_average || 0) >= filters.minRating;
+              if (!passes) {
+                console.log('   ❌ Filtered out:', item.title || item.name, 'rating:', item.vote_average);
+              }
+              return passes;
+            }
           );
         }
+
+        console.log('   After rating filter:', unseenContent.length, 'items');
 
         // Sort by popularity
         unseenContent.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
