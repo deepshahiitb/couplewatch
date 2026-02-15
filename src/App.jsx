@@ -137,9 +137,13 @@ export default function CoupleWatch() {
   };
 
   const initializeUser = async (userId) => {
+    console.log('=== INITIALIZE USER DEBUG ===');
+    console.log('1. User ID:', userId);
+    
     try {
       // Get current session to access user metadata
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('2. Session:', session);
       
       const { data, error } = await supabase
         .from('users')
@@ -147,11 +151,16 @@ export default function CoupleWatch() {
         .eq('id', userId)
         .single();
       
+      console.log('3. Existing user lookup result:', { data, error });
+      
       if (error && error.code === 'PGRST116') {
         // User doesn't exist, create them
+        console.log('4. User not found, creating new user...');
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
         const userEmail = session?.user?.email || '';
         const userName = session?.user?.user_metadata?.display_name || 'User';
+        
+        console.log('5. New user details:', { code, userEmail, userName });
         
         const { data: newUser, error: insertError } = await supabase.from('users').insert({
           id: userId,
@@ -160,15 +169,20 @@ export default function CoupleWatch() {
           couple_code: code
         }).select().single();
         
+        console.log('6. Insert result:', { newUser, insertError });
+        
         if (insertError) {
-          console.error('Insert error:', insertError);
+          console.error('7. Insert error:', insertError);
           setMyCode(code);
         } else if (newUser) {
+          console.log('8. User created successfully! Code:', newUser.couple_code);
           setMyCode(newUser.couple_code);
         } else {
+          console.log('9. No newUser returned, using generated code');
           setMyCode(code);
         }
       } else if (data) {
+        console.log('10. Existing user found, code:', data.couple_code);
         setMyCode(data.couple_code);
       }
       
@@ -176,7 +190,7 @@ export default function CoupleWatch() {
       await loadFriends(userId);
       setView('swipe');
     } catch (err) {
-      console.error('Error initializing user:', err);
+      console.error('ERROR in initializeUser:', err);
     }
   };
 
@@ -530,20 +544,41 @@ export default function CoupleWatch() {
     setLoading(true);
     setError('');
 
+    console.log('=== ADD FRIEND DEBUG ===');
+    console.log('1. Starting handleAddFriend');
+    console.log('2. Compare code entered:', compareCode);
+    console.log('3. Current user:', user);
+    console.log('4. User ID:', user?.id);
+
     try {
+      console.log('5. Searching for user with code:', compareCode.toUpperCase());
+      
       const { data: otherUser, error: findError } = await supabase
         .from('users')
         .select('*')
         .eq('couple_code', compareCode.toUpperCase())
         .single();
 
-      if (findError || !otherUser) {
+      console.log('6. Search result:', { otherUser, findError });
+
+      if (findError) {
+        console.error('7. Find error occurred:', findError);
+        setError(`Code not found. Error: ${findError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!otherUser) {
+        console.error('8. No user found with code:', compareCode.toUpperCase());
         setError('Code not found');
         setLoading(false);
         return;
       }
 
+      console.log('9. Found user:', otherUser);
+
       // Check if already friends
+      console.log('10. Checking if already friends...');
       const { data: existingFriend } = await supabase
         .from('friends')
         .select('*')
@@ -551,23 +586,38 @@ export default function CoupleWatch() {
         .eq('friend_id', otherUser.id)
         .single();
 
+      console.log('11. Existing friendship:', existingFriend);
+
       if (!existingFriend) {
-        // Add friend
-        await supabase.from('friends').insert({
+        console.log('12. Adding new friend relationship...');
+        const { error: insertError } = await supabase.from('friends').insert({
           user_id: user.id,
           friend_id: otherUser.id
         });
 
+        if (insertError) {
+          console.error('13. Insert error:', insertError);
+        } else {
+          console.log('14. Friend added successfully!');
+        }
+
         // Reload friends list
+        console.log('15. Reloading friends list...');
         await loadFriends(user.id);
+        console.log('16. Friends list reloaded');
+      } else {
+        console.log('12. Already friends!');
       }
 
       // Now show matches with this friend
+      console.log('17. Showing matches with friend...');
       await showMatchesWithFriend(otherUser);
       setShowCodePopup(false);
       setCompareCode('');
+      console.log('18. Done!');
 
     } catch (err) {
+      console.error('ERROR in handleAddFriend:', err);
       setError(err.message || 'Failed to add friend');
     } finally {
       setLoading(false);
@@ -1325,6 +1375,58 @@ export default function CoupleWatch() {
             </div>
           )}
         </div>
+
+        {/* Add Friend Popup - Also in Friends view */}
+        {showCodePopup && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowCodePopup(false)}>
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Add Friend</h2>
+              
+              <div className="bg-pink-100 rounded-xl p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-2">Your Code</p>
+                <div className="flex items-center justify-between bg-white rounded-lg p-3">
+                  <span className="text-2xl font-bold text-red-500">{myCode}</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(myCode)}
+                    className="bg-red-500 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Share this code with friends</p>
+              </div>
+
+              <form onSubmit={handleAddFriend} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Enter Friend's Code"
+                  value={compareCode}
+                  onChange={(e) => setCompareCode(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-center text-xl tracking-wider font-semibold"
+                  maxLength={6}
+                  required
+                />
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCodePopup(false)}
+                    className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {loading ? 'Adding...' : 'Add Friend'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
